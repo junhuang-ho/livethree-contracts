@@ -1,0 +1,40 @@
+# setup
+
+yarn add --dev hardhat
+npx hardhat
+---copy this to new repo's README.md
+yarn add --dev dotenv
+yarn add --dev hardhat-deploy
+yarn add --dev @nomiclabs/hardhat-ethers@npm:hardhat-deploy-ethers ethers [this command is to override hardhat-ethers to use hardhat-deploy-ethers - check package.json]
+yarn add --dev @openzeppelin/contracts
+
+add `"resolveJsonModule": true` in tsconfig.json
+
+add .env
+
+copy over - hardhat.config.ts
+
+### Diamond Contract Pattern
+
+1. Diamond-3: https://github.com/mudgen/diamond-3-hardhat
+2. Diamond Storage (data storage ONLY lives in Diamond Proxy Contract):
+   ref | https://eip2535diamonds.substack.com/p/how-storage-works-in-eip2535-diamonds
+   ref | https://eip2535diamonds.substack.com/p/keep-your-data-right-in-eip2535-diamonds?utm_source=substack&utm_campaign=post_embed&utm_medium=web
+   ref | https://dev.to/mudgen/how-diamond-storage-works-90e
+
+3. best practice: DON'T store any user data in Diamond !!!! eg data that cannot be overriden or may require complex migrations
+4. best practice: use new storage position with new struct when defining new data storage variables in Diamond !!! eg define it in new Lib
+
+# Sample Hardhat Project
+
+This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+
+Try running some of the following tasks:
+
+```shell
+npx hardhat help
+npx hardhat test
+REPORT_GAS=true npx hardhat test
+npx hardhat node
+npx hardhat run scripts/deploy.ts
+```
