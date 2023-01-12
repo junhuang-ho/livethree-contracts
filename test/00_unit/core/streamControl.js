@@ -4,6 +4,7 @@ const hre = require("hardhat");
 
 const { testDeployParams, contractDeploy } = require("../../../scripts/main");
 
+const TaskTreasuryUpgradableABI = require("../../../contracts/services/gelato/TaskTreasuryUpgradableABI.json");
 const OpsImplementationABI = require("../../../contracts/services/gelato/OpsImplementationABI.json");
 const ISuperfluid = require("@superfluid-finance/ethereum-contracts/build/contracts/ISuperfluid.json");
 const IConstantFlowAgreementV1 = require("@superfluid-finance/ethereum-contracts/build/contracts/IConstantFlowAgreementV1.json");
@@ -100,6 +101,13 @@ describe("StreamControl", async () => {
     addressGelatoFeeAddr = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
     addressGelatoOps = "0xB3f5503f93d5Ef84b06993a1975B9D21B962892F";
     addressGelatoNetwork = "0x25aD59adbe00C2d80c86d01e2E05e1294DA84823";
+    addressGelatoTreasury = "0x527a819db1eb0e34426297b03bae11F2f8B3A19E";
+
+    ctGelatoTreasury = new ethers.Contract(
+      addressGelatoTreasury,
+      TaskTreasuryUpgradableABI,
+      deployer
+    );
 
     await hre.network.provider.request({
       method: "hardhat_impersonateAccount",
@@ -519,7 +527,7 @@ describe("StreamControl", async () => {
           flowRateApp,
           0
         )
-      ).to.be.revertedWithCustomError(ctStreamControl, "InvalidFlowLifespan");
+      ).to.be.revertedWithCustomError(ctStreamControl, "ZeroFlowLifespan");
     });
     it("Should revert if 0 input flow rate for receiver", async function () {
       await expect(
@@ -531,7 +539,7 @@ describe("StreamControl", async () => {
           flowRateApp,
           flowLifespanSeconds
         )
-      ).to.be.revertedWithCustomError(ctStreamControl, "InvalidFlowRate");
+      ).to.be.revertedWithCustomError(ctStreamControl, "ZeroFlowRate");
     });
     it("Should revert if 0 input flow rate for app", async function () {
       await expect(
@@ -543,7 +551,7 @@ describe("StreamControl", async () => {
           0,
           flowLifespanSeconds
         )
-      ).to.be.revertedWithCustomError(ctStreamControl, "InvalidFlowRate");
+      ).to.be.revertedWithCustomError(ctStreamControl, "ZeroFlowRate");
     });
     it("Should revert insufficient contract gelato balance", async function () {
       await expect(
@@ -965,6 +973,7 @@ describe("StreamControl", async () => {
       ).to.be.revertedWith("Ops.exec: Task not found");
     });
   });
+
   describe("external cancelling", function () {
     it("Should revert if non flow participant tries to end flow", async function () {
       var dataPermission = await ctCFAV1.getFlowOperatorData(
@@ -1108,6 +1117,187 @@ describe("StreamControl", async () => {
           true
         )
       ).to.be.revertedWith("Ops.exec: Task not found");
+    });
+  });
+
+  describe("scheduleDeleteFlow", function () {
+    it("Should revert if supertoken not supported", async function () {
+      await expect(
+        ctStreamControl.scheduleDeleteFlow(
+          addressDAIxMumbai,
+          receiver.address,
+          app.address,
+          flowLifespanSeconds
+        )
+      ).to.be.revertedWithCustomError(ctStreamControl, "InvalidSuperToken");
+    });
+    it("Should revert if 0 input flow lifespan duration", async function () {
+      await expect(
+        ctStreamControl.scheduleDeleteFlow(
+          addressUSDCxMumbai,
+          receiver.address,
+          app.address,
+          0
+        )
+      ).to.be.revertedWithCustomError(ctStreamControl, "ZeroFlowLifespan");
+    });
+    it("Should revert insufficient contract gelato balance", async function () {
+      var balance = await ctGelatoTreasury.userTokenBalance(
+        diamondAddress,
+        addressGelatoFeeAddr
+      );
+      expect(balance).to.be.greaterThan(0);
+
+      var tx = await ctAutomate.withdrawGelatoFunds(balance);
+      var rcpt = await tx.wait();
+
+      var balance = await ctGelatoTreasury.userTokenBalance(
+        diamondAddress,
+        addressGelatoFeeAddr
+      );
+      expect(balance).to.be.equal(0);
+
+      await expect(
+        ctStreamControl.scheduleDeleteFlow(
+          addressUSDCxMumbai,
+          receiver.address,
+          app.address,
+          flowLifespanSeconds
+        )
+      ).to.be.revertedWithCustomError(
+        ctStreamControl,
+        "InsufficientContractGelatoBalance"
+      );
+
+      var tx = await ctAutomate.depositGelatoFunds({
+        from: deployer.address,
+        value: ethers.utils.parseEther("5"),
+      });
+      var rcpt = await tx.wait();
+    });
+    it("Should schedule delete flow and ops executes", async function () {
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(0);
+      expect(flowDataApp.flowRate).to.be.equal(0);
+      const dataCreateFlowReceiver = iCFAV1.encodeFunctionData("createFlow", [
+        addressUSDCxMumbai,
+        receiver.address,
+        flowRateReceiver,
+        ZERO_BYTES,
+      ]);
+      const dataCreateFlowApp = iCFAV1.encodeFunctionData("createFlow", [
+        addressUSDCxMumbai,
+        app.address,
+        flowRateApp,
+        ZERO_BYTES,
+      ]);
+      var tx = await ctSFHost.callAgreement(
+        addressCFAV1,
+        dataCreateFlowReceiver,
+        ZERO_BYTES
+      );
+      var rcpt = await tx.wait();
+      var tx = await ctSFHost.callAgreement(
+        addressCFAV1,
+        dataCreateFlowApp,
+        ZERO_BYTES
+      );
+      var rcpt = await tx.wait();
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(flowRateReceiver);
+      expect(flowDataApp.flowRate).to.be.equal(flowRateApp);
+
+      // schedule delete
+      var tx = await ctStreamControl.scheduleDeleteFlow(
+        addressUSDCxMumbai,
+        receiver.address,
+        app.address,
+        flowLifespanSeconds
+      );
+      var rcpt = await tx.wait();
+      var rc = await ethers.provider.getTransactionReceipt(
+        rcpt.transactionHash
+      );
+      var block = await ethers.provider.getBlock(rc.blockNumber);
+      var startTime = block.timestamp;
+
+      var dataEvent = rcpt.events?.filter((x) => {
+        return x.event == "TaskId";
+      });
+      var taskId = dataEvent.at(0).args.taskId;
+
+      var execData = ctStreamControl.interface.encodeFunctionData(
+        "deleteFlow",
+        [addressUSDCxMumbai, deployer.address, receiver.address, app.address]
+      );
+
+      const timeArgs = encodeTimeArgs(
+        startTime + flowLifespanSeconds,
+        flowLifespanSeconds
+      );
+      moduleData = {
+        modules: [1, 3],
+        args: [timeArgs],
+      };
+
+      await helpers.time.increase(30);
+
+      await expect(
+        ctGelatoOps.connect(gelatoExecutor).exec(
+          diamondAddress, //deployer.address, // deployer.address,
+          diamondAddress,
+          execData,
+          moduleData,
+          GELATO_FEE,
+          addressGelatoFeeAddr,
+          true,
+          true
+        )
+      ).to.be.revertedWith("Ops.preExecCall: TimeModule: Too early");
+
+      await helpers.time.increase(30);
+
+      await ctGelatoOps.connect(gelatoExecutor).exec(
+        diamondAddress, //deployer.address, // deployer.address,
+        diamondAddress,
+        execData,
+        moduleData,
+        GELATO_FEE,
+        addressGelatoFeeAddr,
+        true,
+        true
+      );
+
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(0);
+      expect(flowDataApp.flowRate).to.be.equal(0);
     });
   });
 });

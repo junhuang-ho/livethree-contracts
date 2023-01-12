@@ -8,13 +8,6 @@ import {LibStream} from "../../libraries/core/LibStream.sol";
 import {LibAutomate} from "../../libraries/core/LibAutomate.sol";
 import {IStreamControl} from "../../interfaces/core/IStreamControl.sol";
 
-import "../../services/gelato/Types.sol";
-
-error InvalidSuperToken();
-error InvalidFlowRate();
-error InvalidFlowLifespan();
-error InsufficientContractGelatoBalance();
-
 contract StreamControl is IStreamControl {
     using CFAv1Library for CFAv1Library.InitData;
 
@@ -28,16 +21,10 @@ contract StreamControl is IStreamControl {
         int96 _flowRateApp,
         uint256 _flowLifespan
     ) external {
-        if (!LibStream._storageStream().superTokens[_superToken])
-            revert InvalidSuperToken();
-        if (_flowLifespan <= 0) revert InvalidFlowLifespan();
-        if (_flowRateReceiver <= 0 || _flowRateApp <= 0)
-            revert InvalidFlowRate();
-
-        if (
-            LibAutomate._getContractGelatoBalance() <=
-            LibAutomate._storageAutomate().minContractGelatoBalance
-        ) revert InsufficientContractGelatoBalance();
+        LibStream._requireValidSuperToken(_superToken);
+        LibStream._requireValidFlowLifespan(_flowLifespan);
+        LibStream._requireValidFlowRates(_flowRateReceiver, _flowRateApp);
+        LibAutomate._requireSufficientContractGelatoBalance();
 
         LibStream._storageStream()._cfaLib.createFlowByOperator(
             msg.sender,
@@ -52,32 +39,33 @@ contract StreamControl is IStreamControl {
             _flowRateApp
         );
 
-        ModuleData memory moduleData = ModuleData({
-            modules: new Module[](2),
-            args: new bytes[](1)
-        });
-
-        moduleData.modules[0] = Module.TIME;
-        moduleData.modules[1] = Module.SINGLE_EXEC;
-
-        moduleData.args[0] = LibAutomate._timeModuleArg(
-            block.timestamp + _flowLifespan,
-            _flowLifespan
-        );
-
-        bytes memory execData = abi.encodeWithSelector(
-            this.deleteFlow.selector,
+        bytes32 taskId = LibStream._scheduleDeleteFlow(
             _superToken,
-            msg.sender,
             _receiver,
-            _app
+            _app,
+            _flowLifespan,
+            this.deleteFlow.selector
         );
 
-        bytes32 taskId = LibAutomate._storageAutomate().ops.createTask(
-            address(this), // address(this) = address of diamond
-            execData,
-            moduleData,
-            address(0)
+        emit TaskId(msg.sender, taskId);
+    }
+
+    function scheduleDeleteFlow(
+        ISuperToken _superToken,
+        address _receiver,
+        address _app,
+        uint256 _flowLifespan
+    ) external {
+        LibStream._requireValidSuperToken(_superToken);
+        LibStream._requireValidFlowLifespan(_flowLifespan);
+        LibAutomate._requireSufficientContractGelatoBalance();
+
+        bytes32 taskId = LibStream._scheduleDeleteFlow(
+            _superToken,
+            _receiver,
+            _app,
+            _flowLifespan,
+            this.deleteFlow.selector
         );
 
         emit TaskId(msg.sender, taskId);
@@ -114,8 +102,7 @@ contract StreamControl is IStreamControl {
          * if dont check and hit this condition, and bug effects?
          * TEST !!
          */
-        if (!LibStream._storageStream().superTokens[_superToken])
-            revert InvalidSuperToken();
+        LibStream._requireValidSuperToken(_superToken);
 
         deleteFlow(_superToken, msg.sender, _receiver, _app);
 

@@ -6,6 +6,8 @@ import "../../services/gelato/Types.sol";
 
 // gelato based
 
+error InsufficientContractGelatoBalance();
+
 library LibAutomate {
     using SafeERC20 for IERC20;
 
@@ -167,5 +169,12 @@ library LibAutomate {
                 address(this),
                 LibAutomate._storageAutomate().eth
             );
+    }
+
+    function _requireSufficientContractGelatoBalance() internal view {
+        if (
+            _getContractGelatoBalance() <=
+            _storageAutomate().minContractGelatoBalance
+        ) revert InsufficientContractGelatoBalance();
     }
 }

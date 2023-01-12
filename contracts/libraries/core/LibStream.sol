@@ -5,7 +5,14 @@ import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {ISuperfluid, ISuperToken} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
+import {LibAutomate} from "./LibAutomate.sol";
+
+import "../../services/gelato/Types.sol";
+
 // superfluid based
+error InvalidSuperToken();
+error ZeroFlowLifespan();
+error ZeroFlowRate();
 
 library LibStream {
     using CFAv1Library for CFAv1Library.InitData;
@@ -57,5 +64,58 @@ library LibStream {
         returns (bool)
     {
         return _storageStream().superTokens[_superToken];
+    }
+
+    function _requireValidSuperToken(ISuperToken _superToken) internal view {
+        if (!_storageStream().superTokens[_superToken])
+            revert InvalidSuperToken();
+    }
+
+    function _requireValidFlowLifespan(uint256 _flowLifespan) internal pure {
+        if (_flowLifespan <= 0) revert ZeroFlowLifespan();
+    }
+
+    function _requireValidFlowRates(int96 _flowRateReceiver, int96 _flowRateApp)
+        internal
+        pure
+    {
+        if (_flowRateReceiver <= 0 || _flowRateApp <= 0) revert ZeroFlowRate();
+    }
+
+    function _scheduleDeleteFlow(
+        ISuperToken _superToken,
+        address _receiver,
+        address _app,
+        uint256 _flowLifespan,
+        bytes4 _selector
+    ) internal returns (bytes32) {
+        ModuleData memory moduleData = ModuleData({
+            modules: new Module[](2),
+            args: new bytes[](1)
+        });
+
+        moduleData.modules[0] = Module.TIME;
+        moduleData.modules[1] = Module.SINGLE_EXEC;
+
+        moduleData.args[0] = LibAutomate._timeModuleArg(
+            block.timestamp + _flowLifespan,
+            _flowLifespan
+        );
+
+        bytes memory execData = abi.encodeWithSelector(
+            _selector, // this.deleteFlow.selector,
+            _superToken,
+            msg.sender,
+            _receiver,
+            _app
+        );
+
+        return
+            LibAutomate._storageAutomate().ops.createTask(
+                address(this), // address(this) = address of diamond
+                execData,
+                moduleData,
+                address(0)
+            );
     }
 }
