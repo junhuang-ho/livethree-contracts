@@ -11,7 +11,13 @@ import {IStreamControl} from "../../interfaces/core/IStreamControl.sol";
 contract StreamControl is IStreamControl {
     using CFAv1Library for CFAv1Library.InitData;
 
-    event TaskId(address indexed sender, bytes32 taskId);
+    event CreateTask(
+        address indexed sender,
+        address indexed receiver,
+        address app,
+        bytes32 taskId,
+        uint256 executeOn
+    ); //
 
     function flowCreateAndScheduleDelete(
         ISuperToken _superToken,
@@ -47,7 +53,13 @@ contract StreamControl is IStreamControl {
             this.deleteFlow.selector
         );
 
-        emit TaskId(msg.sender, taskId);
+        emit CreateTask(
+            msg.sender,
+            _receiver,
+            _app,
+            taskId,
+            block.timestamp + _flowLifespan
+        );
     }
 
     function scheduleDeleteFlow(
@@ -55,7 +67,7 @@ contract StreamControl is IStreamControl {
         address _receiver,
         address _app,
         uint256 _flowLifespan
-    ) external {
+    ) public {
         LibStream._requireValidSuperToken(_superToken);
         LibStream._requireValidFlowLifespan(_flowLifespan);
         LibAutomate._requireSufficientContractGelatoBalance();
@@ -68,7 +80,13 @@ contract StreamControl is IStreamControl {
             this.deleteFlow.selector
         );
 
-        emit TaskId(msg.sender, taskId);
+        emit CreateTask(
+            msg.sender,
+            _receiver,
+            _app,
+            taskId,
+            block.timestamp + _flowLifespan
+        );
     }
 
     function deleteFlow(
@@ -107,5 +125,22 @@ contract StreamControl is IStreamControl {
         deleteFlow(_superToken, msg.sender, _receiver, _app);
 
         LibAutomate._storageAutomate().ops.cancelTask(_taskId);
+    }
+
+    function rescheduleDeleteFlow(
+        ISuperToken _superToken,
+        address _receiver,
+        address _app,
+        uint256 _flowLifespan,
+        bytes32 _taskId
+    ) external {
+        /**
+         * TODO: reject if very close to scheduled timestamp??
+         * if dont check and hit this condition, and bug effects?
+         * TEST !!
+         */
+        LibAutomate._storageAutomate().ops.cancelTask(_taskId);
+
+        scheduleDeleteFlow(_superToken, _receiver, _app, _flowLifespan);
     }
 }

@@ -25,6 +25,12 @@ copy over - hardhat.config.ts
 3. best practice: DON'T store any user data in Diamond !!!! eg data that cannot be overriden or may require complex migrations
 4. best practice: use new storage position with new struct when defining new data storage variables in Diamond !!! eg define it in new Lib
 
+# Workflow
+
+- npx hardhat test | test all with forked testnet
+- npx hardhat test "./path/to/specific/test_Script" | test specific
+- see scripts folder and fn/command used for deployment
+
 # Sample Hardhat Project
 
 This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.

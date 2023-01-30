@@ -1,6 +1,6 @@
 import { contractVerify } from "../main";
 
-const CURRENT_DEPLOYED_FOLDER = "mumbai_1673430171488";
+const CURRENT_DEPLOYED_FOLDER = "mumbai_1675066081205";
 const CURRENT_DEPLOYED_FOLDER_DIR = __dirname
   .substring(0, __dirname.lastIndexOf("/"))
   .split("/scripts")

@@ -1,3 +1,5 @@
+TODO: function to extend end date: 1. cancelTask 2. set new schedule
+
 1. test only role write functions in louper.dev on mumbai
    MAINTAINER_ROLE diamondCut
       <!-- DEFAULT_ADMIN_ROLE grantRole

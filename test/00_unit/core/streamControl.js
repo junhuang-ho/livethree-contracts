@@ -901,7 +901,7 @@ describe("StreamControl", async () => {
       var startTime = block.timestamp;
 
       var dataEvent = rcpt.events?.filter((x) => {
-        return x.event == "TaskId";
+        return x.event == "CreateTask";
       });
       var taskId = dataEvent.at(0).args.taskId; //
       /**
@@ -1018,7 +1018,7 @@ describe("StreamControl", async () => {
       theStartTime = block.timestamp;
 
       var dataEvent = rcpt.events?.filter((x) => {
-        return x.event == "TaskId";
+        return x.event == "CreateTask";
       });
       theTaskId = dataEvent.at(0).args.taskId;
 
@@ -1240,7 +1240,7 @@ describe("StreamControl", async () => {
       var startTime = block.timestamp;
 
       var dataEvent = rcpt.events?.filter((x) => {
-        return x.event == "TaskId";
+        return x.event == "CreateTask";
       });
       var taskId = dataEvent.at(0).args.taskId;
 
@@ -1298,6 +1298,192 @@ describe("StreamControl", async () => {
       );
       expect(flowDataReceiver.flowRate).to.be.equal(0);
       expect(flowDataApp.flowRate).to.be.equal(0);
+    });
+  });
+
+  describe("rescheduleDeleteFlow", function () {
+    it("Should revert if taskId not found", async function () {
+      await expect(
+        ctStreamControl.rescheduleDeleteFlow(
+          addressUSDCxMumbai,
+          receiver.address,
+          app.address,
+          flowLifespanSeconds,
+          RANDOM_BYTES32
+        )
+      ).to.be.reverted;
+    });
+    it("Should reschedule new taskId, old task should not be able to execute, and new task executes", async function () {
+      var dataPermission = await ctCFAV1.getFlowOperatorData(
+        addressUSDCxMumbai,
+        deployer.address,
+        diamondAddress
+      );
+      expect(dataPermission.permissions).to.be.equal(7);
+
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(0);
+      expect(flowDataApp.flowRate).to.be.equal(0);
+
+      var tx = await ctAutomate.depositGelatoFunds({
+        from: deployer.address,
+        value: deposit1,
+      });
+      var rcpt = await tx.wait();
+
+      var tx = await ctStreamControl.flowCreateAndScheduleDelete(
+        addressUSDCxMumbai,
+        receiver.address,
+        app.address,
+        flowRateReceiver,
+        flowRateApp,
+        flowLifespanSeconds
+      );
+      var rcpt = await tx.wait();
+      var rc = await ethers.provider.getTransactionReceipt(
+        rcpt.transactionHash
+      );
+      var block = await ethers.provider.getBlock(rc.blockNumber);
+      var startTime = block.timestamp;
+
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(flowRateReceiver);
+      expect(flowDataApp.flowRate).to.be.equal(flowRateApp);
+      expect(flowDataReceiver.deposit).to.be.lessThan(
+        flowRateReceiver.mul(60).mul(60).mul(4)
+      );
+      expect(flowDataApp.deposit).to.be.lessThan(
+        flowRateApp.mul(60).mul(60).mul(4)
+      );
+
+      var execData = ctStreamControl.interface.encodeFunctionData(
+        "deleteFlow",
+        [addressUSDCxMumbai, deployer.address, receiver.address, app.address]
+      );
+
+      const timeArgs = encodeTimeArgs(
+        startTime + flowLifespanSeconds,
+        flowLifespanSeconds
+      );
+      moduleData = {
+        modules: [1, 3],
+        args: [timeArgs],
+      };
+
+      await helpers.time.increase(30);
+
+      await expect(
+        ctGelatoOps.connect(gelatoExecutor).exec(
+          diamondAddress, //deployer.address, // deployer.address,
+          diamondAddress,
+          execData,
+          moduleData,
+          GELATO_FEE,
+          addressGelatoFeeAddr,
+          true,
+          true
+        )
+      ).to.be.revertedWith("Ops.preExecCall: TimeModule: Too early");
+
+      //   const prevTaskId = ctGelatoOps.getTaskId(
+      //     diamondAddress,
+      //     diamondAddress,
+      //     execData,
+      //     moduleData,
+      //     GELATO_FEE
+      //   );
+
+      const prevTaskId = await ctGelatoOps.getTaskIdsByUser(diamondAddress);
+
+      const newFlowLifespanSeconds = 60;
+
+      var tx = await ctStreamControl.rescheduleDeleteFlow(
+        addressUSDCxMumbai,
+        receiver.address,
+        app.address,
+        newFlowLifespanSeconds,
+        prevTaskId.at(0)
+      );
+      var rcpt = await tx.wait();
+      var rc = await ethers.provider.getTransactionReceipt(
+        rcpt.transactionHash
+      );
+      var block = await ethers.provider.getBlock(rc.blockNumber);
+      var startTime = block.timestamp;
+
+      const timeArgs2 = encodeTimeArgs(
+        startTime + newFlowLifespanSeconds,
+        newFlowLifespanSeconds
+      );
+      moduleData2 = {
+        modules: [1, 3],
+        args: [timeArgs2],
+      };
+
+      await helpers.time.increase(30);
+
+      await expect(
+        ctGelatoOps.connect(gelatoExecutor).exec(
+          diamondAddress, //deployer.address, // deployer.address,
+          diamondAddress,
+          execData,
+          moduleData,
+          GELATO_FEE,
+          addressGelatoFeeAddr,
+          true,
+          true
+        )
+      ).to.be.revertedWith("Ops.exec: Task not found");
+
+      const prevTaskId2 = await ctGelatoOps.getTaskIdsByUser(diamondAddress);
+      expect(prevTaskId2.length).to.be.equal(1);
+
+      await helpers.time.increase(30);
+
+      await ctGelatoOps.connect(gelatoExecutor).exec(
+        diamondAddress, //deployer.address, // deployer.address,
+        diamondAddress,
+        execData,
+        moduleData2,
+        GELATO_FEE,
+        addressGelatoFeeAddr,
+        true,
+        true
+      );
+
+      var flowDataReceiver = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        receiver.address
+      );
+      var flowDataApp = await ctCFAV1.getFlow(
+        addressUSDCxMumbai,
+        deployer.address,
+        app.address
+      );
+      expect(flowDataReceiver.flowRate).to.be.equal(0);
+      expect(flowDataApp.flowRate).to.be.equal(0);
+
+      var taskId_ = await ctGelatoOps.getTaskIdsByUser(diamondAddress);
+      expect(taskId_.length).to.be.equal(0);
     });
   });
 });
