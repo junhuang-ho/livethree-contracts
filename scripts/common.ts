@@ -27,6 +27,13 @@ export const networkConfig = {
   },
   137: {
     name: "polygon",
+    addrUSDCx: "0xCAa7349CEA390F89641fe306D93591f87595dc1F",
+    addrDAIx: "0x1305F6B6Df9Dc47159D12Eb7aC2804d4A33173c2",
+    addrSFHost: "0x3E14dC1b13c488a8d5D310918780c983bD5982E7",
+    addrCFAV1: "0x6EeE6060f715257b970700bc2656De21dEdF074C",
+    addrGelNet: "0x7598e84B2E114AB62CAB288CE5f7d5f6bad35BbA",
+    addrGelOps: "0x527a819db1eb0e34426297b03bae11F2f8B3A19E",
+    addrGelTreasury: "0x32DC6700AC87f6300277a63b0A4fDf132A8392bd",
   },
   80001: {
     name: "mumbai",

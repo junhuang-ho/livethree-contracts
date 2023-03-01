@@ -31,10 +31,18 @@ const config: CustomConfig = {
         blockNumber: 30807164,
       },
     },
+    polygon: {
+      chainId: 137,
+      url: process.env.ALCHEMY_API_URL_POLYGON!,
+      accounts: [process.env.PRIVATE_KEY_1!],
+      //   blockGasLimit: 3000000,
+      //   gasPrice: 100000000000, // 100 gwei
+    },
     mumbai: {
       chainId: 80001,
       url: process.env.ALCHEMY_API_URL_MUMBAI!,
       accounts: [process.env.PRIVATE_KEY_1!, process.env.PRIVATE_KEY_2!],
+      //   blockGasLimit: 2200000,
     },
   },
   etherscan: {

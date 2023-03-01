@@ -144,6 +144,12 @@ export const deploy = async (
   const contract = await ethers.getContractFactory(contractName, deployer);
   const contractDeployed = await contract.deploy(...args);
 
+  console.log(
+    "gas limit:",
+    contractDeployed.deployTransaction.gasLimit.toString()
+  );
+  console.log("tx hash:", contractDeployed.deployTransaction.hash);
+
   if (chainId === CHAIN_ID_HARDHAT) {
     await contractDeployed.deployed();
   } else {
@@ -290,3 +296,13 @@ module.exports = {
   deployDiamondAndFacets,
   cutFacets,
 };
+
+// gas limit: 2344376
+// gas limit: 2271076
+// gas limit: 717427
+// gas limit: 827185
+// gas limit: 679360
+// gas limit: 1218351
+// gas limit: 862486
+// gas limit: 1611154
+// gas limit: 1018479
